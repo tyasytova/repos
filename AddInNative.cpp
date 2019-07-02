@@ -526,13 +526,22 @@ bool CAddInNative::CallAsFunc(const long lMethodNum,
 	{
 		if (!lSizeArray || !paParams)
 			return false;
-		
+	
 #ifdef MAGICK_HOME
 		// http://www.imagemagick.org/Magick++/
 		//    under Windows it is necessary to initialize the ImageMagick
 		//    library prior to using the Magick++ library
 		Magick::InitializeMagick(MAGICK_HOME);
 #endif
+	
+		switch (TV_VT(paParams))
+		{
+		case VTYPE_PSTR:
+			name = paParams->pstrVal;
+			break;
+		default:
+			return false;
+		}
 
 		// create a reader
 		ImageScanner scanner;
@@ -540,31 +549,33 @@ bool CAddInNative::CallAsFunc(const long lMethodNum,
 		// configure the reader
 		scanner.set_config(ZBAR_NONE, ZBAR_CFG_ENABLE, 1);
 
-		Magick::Image magick(str);    // read an image file
-		int width_ = magick.columns();   // extract dimensions
-		int height_ = magick.rows();
+		Magick::Image magick(name);    // read an image file
+		int width = magick.columns();   // extract dimensions
+		int height = magick.rows();
 		Magick::Blob blob;              // extract the raw data
 		magick.modifyImage();
 		magick.write(&blob, "GRAY", 8);
 		const void* raw = blob.data();
 
 		// wrap image data
-		zbar::Image image(width_, height_, "Y800", raw, width * height_);
+		zbar::Image image(width, height, "Y800", raw, width * height);
 
 		// scan the image for barcodes
 		int n = scanner.scan(image);
-
+		std::string bcode;
 		// extract results
 		for (zbar::Image::SymbolIterator symbol = image.symbol_begin();
 			symbol != image.symbol_end();
 			++symbol) {
 			// do something useful with results
+			TV_VT(pvarRetValue) = VTYPE_BLOB;
 			bcode = symbol->get_data();
 		}
 
 		// clean up
 		image.set_data(NULL, 0);
-
+		pvarRetValue->strLen = bcode;
+		return true;
 		break;
 	}
     case eMethLoadPicture:
